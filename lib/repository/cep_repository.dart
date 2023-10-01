@@ -1,6 +1,6 @@
 import 'dart:convert';
-
-import 'package:flutter/material.dart';
+import 'package:basic_utils/basic_utils.dart';
+import 'package:viacep_app/exception/custom_exception.dart';
 import 'package:viacep_app/interface/cep_interface.dart';
 import 'package:viacep_app/models/cep.dart';
 import 'package:http/http.dart' as http;
@@ -13,17 +13,18 @@ class CEPRepository implements CEPInterface {
     await Future.delayed(const Duration(milliseconds: 200));
     // adicionar um novo cep caso não possua no back4app
     // adicionar cep no Back4App
-    print('CEP encontrado: ${cep.cep} / ${cep.bairro}');
-    final response = await http.post(
-        Uri.parse('https://parseapi.back4app.com/classes/ceps'),
-        headers: Constants.headers,
-        body: jsonEncode(cep.toJson()));
-    final id = jsonDecode(response.body)['objectId'];
-    cep.objectId = id;
-    print('CEP SENDO ADICIONADO NA LISTA');
+    try {
+      final response = await http.post(
+          Uri.parse('https://parseapi.back4app.com/classes/ceps'),
+          headers: Constants.headers,
+          body: jsonEncode(cep.toJson()));
+      final id = jsonDecode(response.body)['objectId'];
+      cep.objectId = id;
+    } catch (error) {
+      throw CustomException(msg: error.toString());
+    }
     _items.add(cep);
     await fetchAllCEP();
-    notifyListeners();
   }
 
   @override
@@ -32,20 +33,24 @@ class CEPRepository implements CEPInterface {
   @override
   Future<void> getNewCEPByViaCep(String cep) async {
     await Future.delayed(const Duration(seconds: 2));
-    // pega o cepp do viaCep e manda para addNewCep adicionar na lista e no Back4App
-    var hasCEP = items.where((element) => element.cep == cep);
+    String newCep = StringUtils.addCharAtPosition(cep, "-", 5);
+    var hasCEP = items.where((element) => element.cep == newCep).toList();
     if (hasCEP.isNotEmpty) {
-      print('CEP já existe.');
-      return;
+      throw CustomException(
+          msg: 'Esse CEP já está na sua lista.', statusCode: 0);
     }
 
-    print('CEP não encontrado nos items salvos. Procurando no ViaCEP');
     final viaCepReponse =
         await http.get(Uri.parse('https://viacep.com.br/ws/$cep/json/'));
     if (viaCepReponse.statusCode == 200) {
-      final data = jsonDecode(viaCepReponse.body);
-      print('CEP sendo adicionado na função addNewCEP');
+      Map<String, dynamic> data = jsonDecode(viaCepReponse.body);
+      if (data.containsKey('erro')) {
+        throw CustomException(msg: 'Esse CEP não existe!');
+      }
       await addNewCEP(CEP.fromJson(data, ''));
+    } else if (viaCepReponse.statusCode == 400) {
+      throw CustomException(
+          msg: 'Houve algum problema, esse CEP está correto?');
     }
   }
 
@@ -57,7 +62,6 @@ class CEPRepository implements CEPInterface {
     );
     if (deleteResponse.statusCode == 200) {
       _items.remove(cep);
-      // print('deletado com sucesso');
     }
   }
 
@@ -75,15 +79,15 @@ class CEPRepository implements CEPInterface {
       Uri.parse('https://parseapi.back4app.com/classes/ceps'),
       headers: Constants.headers,
     );
-    dynamic data = jsonDecode(response.body)['results'];
-    data.forEach((json) {
-      // print('Key $key');
+    dynamic data = jsonDecode(response.body);
+    List dataKeys = data['results'];
+    if (data == null) {
+      throw CustomException(msg: 'Houve um problema a obter os dados.');
+    }
+    for (var json in dataKeys) {
       _items.add(CEP.fromJson(json, json['objectId']));
-      print('adicionado');
-      // print(value);
-    });
+    }
     return _items;
-    // print(response.body);
   }
 
   @override
@@ -94,33 +98,4 @@ class CEPRepository implements CEPInterface {
   @override
   // TODO: implement items
   List<CEP> get items => [..._items];
-
-  @override
-  void addListener(VoidCallback listener) {
-    // TODO: implement addListener
-  }
-
-  @override
-  void dispose() {
-    // TODO: implement dispose
-  }
-
-  @override
-  // TODO: implement hasListeners
-  bool get hasListeners => throw UnimplementedError();
-
-  @override
-  void maybeDispatchObjectCreation() {
-    // TODO: implement maybeDispatchObjectCreation
-  }
-
-  @override
-  void notifyListeners() {
-    // TODO: implement notifyListeners
-  }
-
-  @override
-  void removeListener(VoidCallback listener) {
-    // TODO: implement removeListener
-  }
 }

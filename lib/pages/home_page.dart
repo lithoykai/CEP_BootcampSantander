@@ -1,4 +1,7 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
+import 'package:viacep_app/exception/custom_exception.dart';
 import 'package:viacep_app/interface/cep_interface.dart';
 import 'package:viacep_app/models/cep.dart';
 import 'package:viacep_app/repository/cep_repository.dart';
@@ -21,6 +24,7 @@ class _HomePageState extends State<HomePage> {
 
   Future<void> _cepSubmit(BuildContext context) async {
     _cepController.clear();
+    final firstContext = context;
     return showDialog(
         context: context,
         builder: (context) {
@@ -45,17 +49,24 @@ class _HomePageState extends State<HomePage> {
                           ),
                           TextButton(
                             onPressed: () async {
-                              setState(() {
-                                isLoading = true;
-                              });
-                              await cepRepository
-                                  .getNewCEPByViaCep(_cepController.text);
-                              setState(() {
-                                cepRepository.fetchAllCEP();
-                                Navigator.pop(context);
-                                dispose();
-                                isLoading = false;
-                              });
+                              try {
+                                await cepRepository
+                                    .getNewCEPByViaCep(_cepController.text);
+                                setState(() {
+                                  cepRepository.fetchAllCEP();
+
+                                  Navigator.pop(firstContext);
+                                });
+                              } on CustomException catch (error) {
+                                // ignore: use_build_context_synchronously
+                                showDialog(
+                                    context: firstContext,
+                                    builder: (ctx) {
+                                      return AlertDialog.adaptive(
+                                        content: Text(error.toString()),
+                                      );
+                                    });
+                              }
                             },
                             child: const Text('Pesquisar'),
                           ),
@@ -69,6 +80,7 @@ class _HomePageState extends State<HomePage> {
 
   @override
   Widget build(BuildContext context) {
+    final msg = ScaffoldMessenger.of(context);
     return Scaffold(
       appBar: AppBar(
         title: const Text('CEP'),
@@ -88,9 +100,9 @@ class _HomePageState extends State<HomePage> {
                     if (snapshot.hasError) {
                       return Center(child: Text(snapshot.error.toString()));
                     } else {
-                      if (snapshot.data!.length > 0) {
+                      if (snapshot.data!.isNotEmpty) {
                         return isLoading
-                            ? Center(
+                            ? const Center(
                                 child: CircularProgressIndicator(),
                               )
                             : ListView.builder(
@@ -103,7 +115,7 @@ class _HomePageState extends State<HomePage> {
                                       subtitle: Text(
                                           'CEP: ${currentCep.cep} | ${currentCep.localidade} - ${currentCep.uf}'),
                                       trailing: IconButton(
-                                        icon: Icon(Icons.delete,
+                                        icon: const Icon(Icons.delete,
                                             color: Colors.red),
                                         onPressed: () {
                                           isLoading = true;
@@ -130,43 +142,16 @@ class _HomePageState extends State<HomePage> {
                       );
                     }
                 }
-              }
-
-              //   if (snapshot.connectionState == ConnectionState.done) {
-              //     if (snapshot.hasData) {
-
-              //   } else if (snapshot.data == null || snapshot.data == []) {
-              //     return const Center(
-              //       child: Text('Não há nenhum registro de CEP armazenado'),
-              //     );
-              //   }
-              //   if (snapshot.connectionState == ConnectionState.waiting) {
-              //     return const Center(child: CircularProgressIndicator());
-              //   }
-
-              //   return const Center(
-              //     child: Text('Não há nenhum registro de CEP armazenado'),
-              //   );
-              // }
-              //   ListView.builder(
-              //     itemBuilder: (context, i) {
-              //       items = cepRepository.items;
-              //       if (items.isEmpty) {
-              //         return const Center(
-              //             child: Text('Não há nenhum cep registrado.'));
-              //       } else {
-              //         return ListTile(
-              //           title: Text(items[i].cep),
-              //         );
-              //       }
-              //     },
-              //     itemCount: cepRepository.items.length,
-              //   ),
-              // ),
-              )),
+              })),
       floatingActionButton: FloatingActionButton.extended(
-        onPressed: () async => _cepSubmit(context),
-        label: Text('Pesquisar CEP'),
+        onPressed: () async {
+          try {
+            _cepSubmit(context);
+          } on HttpException catch (error) {
+            msg.showSnackBar(SnackBar(content: Text(error.toString())));
+          }
+        },
+        label: const Text('Pesquisar CEP'),
         icon: const Icon(Icons.search),
       ),
     );

@@ -1,7 +1,6 @@
-import 'package:flutter/material.dart';
 import 'package:viacep_app/models/cep.dart';
 
-abstract class CEPInterface with ChangeNotifier {
+abstract class CEPInterface {
   List<CEP> items = [];
   Future<void> fetchCEP() async {}
   Future<List<CEP>> fetchAllCEP() async {
